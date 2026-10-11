@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultContentItems>false</EnableDefaultContentItems>
+    <AssemblyName>ISH.CustomerPortal.API.EmailCompileCheck</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../Application.CompileCheck/Application.CompileCheck.csproj" />
+    <ProjectReference Include="../Infrastructure.CompileCheck/Infrastructure.CompileCheck.csproj" />
+    <Compile Include="../../source-code/ISH.CustomerPortal.API/**/*.cs" />
+  </ItemGroup>
+</Project>

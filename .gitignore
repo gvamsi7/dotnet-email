@@ -16,3 +16,6 @@
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Verification publish output
+artifacts/

@@ -1,4 +1,4 @@
-name: .NET Framework build
+name: Email component checks
 
 on:
   push:
@@ -9,19 +9,42 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: windows-latest
+  aspnet-core-integration:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Set up verification SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build and verify the layered email component
+        run: dotnet run --project verification/SmokeTests/FeedbackEmail.SmokeTests.csproj --configuration Release
+      - name: Publish the verification host with embedded template
+        run: dotnet publish verification/SmokeTests/FeedbackEmail.SmokeTests.csproj --configuration Release --output artifacts/email-check
+      - name: Verify the published component
+        run: dotnet artifacts/email-check/FeedbackEmail.SmokeTests.dll
 
-      - name: Build .NET Framework 4.8 project
+  legacy-net48:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: examples/legacy-net48
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build legacy .NET Framework example
         run: dotnet build .\FeedbackEmail.csproj --configuration Release --nologo
-
-      - name: Generate HTML and EML previews without SMTP
+      - name: Generate legacy previews without SMTP
         shell: pwsh
         run: |
           & .\bin\Release\net48\FeedbackEmail.exe --preview

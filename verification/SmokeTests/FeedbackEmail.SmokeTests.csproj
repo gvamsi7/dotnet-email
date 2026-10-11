@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../API.CompileCheck/API.CompileCheck.csproj" />
+    <ProjectReference Include="../Application.CompileCheck/Application.CompileCheck.csproj" />
+    <ProjectReference Include="../Infrastructure.CompileCheck/Infrastructure.CompileCheck.csproj" />
+  </ItemGroup>
+</Project>

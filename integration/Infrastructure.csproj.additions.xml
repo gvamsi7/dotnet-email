@@ -1,0 +1,14 @@
+<!-- Merge these entries into your EXISTING ISH.CustomerPortal.Infrastructure.csproj.
+     Keep its existing SDK, target framework, references, and build settings.
+     Add ProjectReference/FrameworkReference only if they are not already present.
+     With central package management, put the MailKit version in Directory.Packages.props. -->
+<Project>
+  <ItemGroup>
+    <ProjectReference Include="..\ISH.CustomerPortal.Application\ISH.CustomerPortal.Application.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="MailKit" Version="4.17.0" />
+    <EmbeddedResource Include="Email\Templates\Feedback.html">
+      <LogicalName>ISH.CustomerPortal.Infrastructure.Email.Templates.Feedback.html</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

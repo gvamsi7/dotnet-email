@@ -1,0 +1,7 @@
+<!-- Only add missing references to your EXISTING API project. -->
+<Project>
+  <ItemGroup>
+    <ProjectReference Include="..\ISH.CustomerPortal.Application\ISH.CustomerPortal.Application.csproj" />
+    <ProjectReference Include="..\ISH.CustomerPortal.Infrastructure\ISH.CustomerPortal.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

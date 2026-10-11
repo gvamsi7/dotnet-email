@@ -1,151 +1,164 @@
-# Feedback email — C# / .NET Framework 4.8
+# ISH feedback email integration
 
-A feedback notification based on the supplied screenshot: a green Schneider Electric / Industrial Services Hub header, Feedback heading, feedback type, comments, timestamp, submitter, attachments, hardware ID, and a muted footer.
+Email-only integration for the project layout shown in the screenshot:
+`ISH.CustomerPortal.API`, `ISH.CustomerPortal.Application`, and `ISH.CustomerPortal.Infrastructure`.
 
-The project targets **.NET Framework 4.8**, uses C# 7.3 and MailKit 4.17.0, and includes a small console runner. The renderer, message factory, and SMTP service can also be copied into an existing .NET Framework application.
+The screenshot shows an ASP.NET Core Web SDK project with `appsettings.json`, `Program.cs`, and `DependencyInjection.cs`. Use the **source-code** files below for that application. The earlier .NET Framework 4.8 console example is retained in [examples/legacy-net48](examples/legacy-net48).
 
-## Quick start in Visual Studio
+This repository is an integration component, not a copy of your company application. It adds no database, authentication scheme, feedback endpoint, or replacement application startup. Your existing handler supplies each user's feedback and calls the email service.
 
-1. Extract this folder. Open `FeedbackEmail.csproj` in Visual Studio with the .NET desktop development workload and .NET Framework 4.8 targeting pack installed.
-2. Restore NuGet packages and build. MailKit is already referenced by the project. In an existing project, install it with `Install-Package MailKit -Version 4.17.0`.
-3. Run without arguments. It creates `Preview/feedback-preview.html` and `Preview/feedback-preview.eml` under the executable's output directory. It does not connect to SMTP in preview mode.
-4. Open the HTML in a browser. Open the EML in Outlook or another compatible mail client to inspect the message and attachments.
-5. Configure `App.config` as described below, rebuild, and run with `--send` when you want to send the sample message to the configured recipient.
+## Where each file belongs
 
-From a Visual Studio Developer PowerShell, the equivalent commands are:
+Paths below are relative to your existing `source-code` folder.
 
-```powershell
-dotnet build .\FeedbackEmail.csproj -c Release
-.\bin\Release\net48\FeedbackEmail.exe --preview
-```
-
-`Preview/feedback-preview.html` included in this project is an illustrative rendering with fixed sample values. The executable generates fresh previews using your current configuration and the same embedded template.
-
-## SMTP settings
-
-Edit these values in `App.config`. In an existing ASP.NET Framework application, put the `<appSettings>` entries into its `Web.config` instead; merge with its existing configuration.
-
-| Setting | Value to supply |
+| Existing project / location | Add or merge |
 | --- | --- |
-| `Smtp.Host` | Your approved SMTP server hostname |
-| `Smtp.Port` | Server port, commonly `587` with STARTTLS or `465` with implicit TLS |
-| `Smtp.Security` | `StartTls` or `SslOnConnect`, matching the server |
-| `Smtp.Authentication` | `Password`, `OAuth2`, or `None` for an approved relay |
-| `Smtp.Username` | SMTP account name, normally an email address |
-| `Smtp.TimeoutSeconds` | Overall send timeout, from 1 to 300 seconds |
-| `Email.FromAddress` | A sender address your SMTP account is allowed to use |
-| `Email.ToAddress` | Your feedback/support mailbox; one configured recipient |
+| `ISH.CustomerPortal.Application/Feedback` | `IFeedbackEmailService.cs` and `FeedbackSubmission.cs`: the interface, feedback data, and attachment bytes |
+| `ISH.CustomerPortal.Infrastructure/Email` | SMTP implementation, options, validation, renderer, message factory, token-provider interface, and DI extension |
+| `ISH.CustomerPortal.Infrastructure/Email/Templates` | `Feedback.html`: the email layout |
+| `ISH.CustomerPortal.API` | `FeedbackEmailRegistration.cs`: a small registration extension |
+| `ISH.CustomerPortal.API/appsettings.json` | Merge the `FeedbackEmail` section from the [configuration example](integration/appsettings.feedback-email.example.json) |
+| `ISH.CustomerPortal.API/Program.cs` or its existing `DependencyInjection.cs` | Call `AddCustomerPortalFeedbackEmail(...)` once |
+| Your existing feedback handler/controller | Inject `IFeedbackEmailService` and call `SendAsync` with real submission data |
 
-Supply credentials to the **server process** as environment variables:
+`Domain`, persistence/SQL Server, authentication, WebSocket, EmptyOffer, and `ISH.Shared.Service` do not need changes for email sending. The screenshot also contains `ISH.CustomerPortal.Infrastructure.EcoS.Notification`; its existing implementation was not provided. The new SMTP implementation lives in the general Infrastructure project. If your team already routes all mail through EcoS.Notification, adapt that existing sender behind `IFeedbackEmailService` instead of registering two senders.
 
-- `FEEDBACK_SMTP_PASSWORD` for a password or provider-issued app password.
-- `FEEDBACK_SMTP_ACCESS_TOKEN` for an existing OAuth2 access token when `Smtp.Authentication` is `OAuth2`.
+## Integrate into your existing solution
 
-The project does not store credentials in source or config. Use the authentication method your mail administrator supports. Setting `Password` does not enable password authentication on the provider. For IIS, provision secrets to the application process and recycle the application pool after changing its environment. Do not put secrets in browser JavaScript.
+### 1. Copy the new files
 
-For a local PowerShell session, you can set a password without placing it in command history:
+Merge this repository's [source-code](source-code) folder into your existing `source-code`. It contains only the new email files; it has no replacement `.csproj`, `Program.cs`, `DependencyInjection.cs`, or `appsettings.json`.
 
-```powershell
-$smtpSecret = Read-Host 'SMTP password/app password' -AsSecureString
-$smtpCredential = New-Object System.Net.NetworkCredential('', $smtpSecret)
-$env:FEEDBACK_SMTP_PASSWORD = $smtpCredential.Password
-try {
-    .\bin\Release\net48\FeedbackEmail.exe --send
-}
-finally {
-    Remove-Item Env:\FEEDBACK_SMTP_PASSWORD -ErrorAction SilentlyContinue
-    $smtpCredential = $null
-    $smtpSecret.Dispose()
-}
+The screenshot does not reveal `<TargetFramework>`. **Keep the target framework in your real projects.** The reference checks in this repo target .NET 8 to validate the files independently; they are not a requirement to retarget your application. If your projects target an older runtime or `netstandard`, align the Microsoft.Extensions references with that runtime before integrating.
+
+### 2. Update project references and embed the template
+
+Merge the entries in [Infrastructure.csproj.additions.xml](integration/Infrastructure.csproj.additions.xml) into `ISH.CustomerPortal.Infrastructure.csproj`. They add:
+
+- A reference to `ISH.CustomerPortal.Application`, if missing.
+- MailKit 4.17.0 in **Infrastructure only**.
+- `Microsoft.AspNetCore.App` as a framework reference for the ASP.NET Core configuration, DI, options, and logging APIs. Add only if missing. This form is for an Infrastructure project targeting modern .NET; if it targets `netstandard`, use the compatible Microsoft.Extensions packages already used by your solution instead.
+- An explicit embedded resource for the HTML:
+
+```xml
+<EmbeddedResource Include="Email\Templates\Feedback.html">
+  <LogicalName>ISH.CustomerPortal.Infrastructure.Email.Templates.Feedback.html</LogicalName>
+</EmbeddedResource>
 ```
 
-OAuth token acquisition, app registration, permissions, and token refresh depend on your provider and are not bundled. A long-running application should inject a token provider that obtains a valid SMTP-scoped access token for each send:
+With central package management, add the MailKit version to `Directory.Packages.props` and omit `Version` on the `PackageReference`.
+
+Ensure the API references Application and Infrastructure; [API.csproj.additions.xml](integration/API.csproj.additions.xml) shows those entries. Add only references that are missing.
+
+The renderer reads the template from **its own Infrastructure assembly**. The API's `EnableDefaultContentItems=false` setting shown in the screenshot does not affect this embedded resource. There is no dependency on `wwwroot`, the process working directory, or a copied HTML file beside the application.
+
+### 3. Configure SMTP in the API project
+
+Merge [appsettings.feedback-email.example.json](integration/appsettings.feedback-email.example.json) into the existing API `appsettings.json`. Replace the example SMTP host, username, sender, and support mailbox. Preserve all your application's other settings. `Host` is deliberately validated at startup so an unconfigured email feature fails with a clear message.
+
+Put credentials in your existing secret provider or server environment:
+
+| Environment variable | Configuration key |
+| --- | --- |
+| `FeedbackEmail__Password` | `FeedbackEmail:Password` |
+| `FeedbackEmail__AccessToken` | `FeedbackEmail:AccessToken` |
+
+These are ASP.NET Core configuration keys. The legacy example's `FEEDBACK_SMTP_PASSWORD` variable and `App.config` loader are not used by this version. Your existing normal ASP.NET Core configuration pipeline loads environment variables; if your app uses a custom pipeline, ensure that provider is included.
+
+For local development, use the API project's existing User Secrets setup or initialize it with `dotnet user-secrets init --project source-code/ISH.CustomerPortal.API`. Set `FeedbackEmail:Password` in that store. Do not commit passwords or tokens to JSON.
+
+`Security` accepts `StartTls` (commonly port 587) or `SslOnConnect` (commonly 465). Authentication accepts `Password`, `OAuth2`, or `None` for an administrator-approved TLS relay. Use the mode your provider supports. The sender must be permitted for the SMTP account.
+
+For OAuth2, implement and register `IFeedbackSmtpTokenProvider` using your existing identity service to acquire a valid SMTP-scoped access token for each send. `AccessToken` from configuration is also supported for short-lived tests. App registration, consent, permissions, and refresh are provider-specific and are not included.
+
+### 4. Register the service once
+
+In the **existing** API `Program.cs`, after the application's normal configuration setup and before `builder.Build()`:
 
 ```csharp
-var service = new FeedbackEmailService(options, cancellationToken =>
-    yourTokenService.GetSmtpAccessTokenAsync(cancellationToken));
+using ISH.CustomerPortal.API;
+
+builder.Services.AddCustomerPortalFeedbackEmail(builder.Configuration);
 ```
 
-`yourTokenService` above is your application's provider-specific token service. The environment-token option is useful for a short-lived test with an already-issued token.
-
-## Use from your application
-
-Copy `Models`, `Services`, and `Templates` into the backend project and install MailKit. Add a reference to `System.Configuration`. Set the HTML file's Build Action to **Embedded Resource**. The supplied project uses the resource name `FeedbackEmail.Templates.Feedback.html`; if your project has a different root namespace, update that name in `FeedbackTemplateRenderer.cs`, or explicitly set that resource's `LogicalName` to `FeedbackEmail.Templates.Feedback.html`.
+Or put this inside your **existing** `DependencyInjection.cs` registration method:
 
 ```csharp
-using System;
-using FeedbackEmail;
+services.AddCustomerPortalFeedbackEmail(configuration);
+```
 
-// Inside an async method/controller action:
-var feedback = new FeedbackSubmission
+Use one location. Keep your existing authentication, middleware, controllers, service registrations, and application startup.
+
+### 5. Call from your existing feedback handler
+
+Inject the Application interface through your existing constructor:
+
+```csharp
+using ISH.CustomerPortal.Application.Feedback;
+
+private readonly IFeedbackEmailService _feedbackEmail;
+
+// Add this parameter and assignment to your existing constructor:
+// IFeedbackEmailService feedbackEmail
+// _feedbackEmail = feedbackEmail;
+```
+
+After your existing validation (and feedback save, if you already store it), await:
+
+```csharp
+var submission = new FeedbackSubmission
 {
-    Type = FeedbackType.GeneralFeedback, // Or FeedbackType.ReportABug
-    Comments = "Please add a confirmation after submitting feedback.",
+    Type = model.IsBug ? FeedbackType.ReportABug : FeedbackType.GeneralFeedback,
+    Comments = model.Comments,
+    SubmittedBy = currentUser.Email,
     SubmittedAt = DateTimeOffset.UtcNow,
-    SubmittedBy = "user@example.com",
-    HardwareId = "ISH-DEVICE-001"
+    HardwareId = model.HardwareId
 };
 
-var options = FeedbackEmailOptions.FromConfiguration();
-var service = new FeedbackEmailService(options);
-string messageId = await service.SendAsync(feedback);
+string messageId = await _feedbackEmail.SendAsync(submission, cancellationToken);
 ```
 
-For a real form, take `SubmittedBy` from the authenticated user's verified email and set the timestamp on the server. Validate the form and uploaded files before calling the service. Use your existing authorization, upload size limits, permitted file types, and malware checks. This project is the email component; it does not add a public API, screenshot capture, file hosting, or storage.
+`model`, `currentUser`, and `cancellationToken` above refer to your existing request model, trusted authenticated-user context, and handler/request cancellation token. Map their names to your application. Use the verified user's email from your server-side identity service; do not treat an arbitrary form field as verified identity.
 
-### Attach a screenshot or another file
+The configured application SMTP account sends each notification to the configured support mailbox. The body identifies the individual user in `Submitted By`. Each call creates a separate message and SMTP client, and shared feedback data is not stored in the sender.
 
-Add validated bytes to the submission before `SendAsync`:
+Add screenshots from your existing validated upload flow before sending:
 
 ```csharp
-feedback.Attachments.Add(new FeedbackAttachment
+submission.Attachments.Add(new FeedbackAttachment
 {
     FileName = "Screenshot1.png",
     Content = validatedScreenshotBytes
 });
 ```
 
-`validatedScreenshotBytes` represents the bytes accepted by your upload pipeline. The file becomes a real MIME attachment. The email body shows `Screenshot1.png (attached)`; users open it from the mail client's attachment list. The filename is not a fake hyperlink to a server filesystem path.
+`validatedScreenshotBytes` must come from your upload validation/storage pipeline, not an arbitrary server file path supplied by a caller. Up to 5 files and 10 MiB of combined raw attachment data are allowed. The mail contains actual MIME attachments. An optional `DownloadUrl` can reference an existing HTTPS route managed by your application; without a URL the body shows the filename with `(attached)`.
 
-To reproduce the screenshot's clickable filename, also set `DownloadUrl` to an existing HTTPS URL generated by your application. The service does not upload the attachment. The link must remain available to the intended recipient; use your own authenticated or appropriately scoped download route. The file is still attached to the message.
+If feedback is already persisted and SMTP fails, handle notification status separately so users are not told that the stored feedback was lost. Use your existing durable job/outbox system if mail must be delivered in the background. Do not use an unawaited `Task.Run` inside an HTTP request. The component propagates exceptions and does not automatically retry a send with an uncertain outcome.
 
-Up to 5 attachments and 10 MiB of combined raw attachment data are supported. MIME/base64 encoding increases the transmitted size; adjust the limit to your mail server's policy.
+## Customization
 
-## Branding and layout
+- Edit `Infrastructure/Email/Templates/Feedback.html` for the layout.
+- The default green is `#3DCD58`; the brand defaults to a text fallback. Set `LogoFilePath` to a trusted absolute PNG/JPG path to embed your approved logo using CID.
+- Supply real HTTPS `TermsUrl` and `PrivacyUrl` values to turn the footer text into links.
+- `TimeZoneId` defaults to `Asia/Kolkata`; choose an ID available on your server.
+- User-entered text is HTML-encoded, newlines are preserved, and the MIME message includes a plain-text version.
+- SMTP credentials and the feedback body are not logged by the sender. Successful SMTP acceptance logs only the generated message ID.
 
-- `Templates/Feedback.html` contains the editable design. It uses presentation tables, inline styles, an Outlook width fallback, and optional mobile styles.
-- The green is `#3DCD58`. Change it in the template to your approved brand color.
-- The default brand is a **text fallback**, because an original logo asset was not supplied. To use the exact company logo, set `Email.LogoFilePath` to a trusted server-side PNG or JPG path. A transparent white logo works well on the green banner. The service embeds it with a Content-ID, so it does not depend on a public image URL.
-- `Email.ApplicationName`, `Email.CompanyName`, and `Email.CopyrightOwner` control the text branding.
-- `Email.TermsUrl` and `Email.PrivacyUrl` accept actual HTTPS policy links. Empty values show plain text, avoiding broken placeholder links.
-- `Email.TimeZoneId` defaults to the Windows time-zone ID `India Standard Time`. The email shows an explicit UTC offset. Use a different Windows ID if needed.
-- User comments are HTML-encoded; line breaks are preserved. HTML typed into the form is shown as text. No comment truncation or JavaScript is used.
-- A plain-text alternative is included for clients that do not display HTML.
+## Verify without sending email
 
-## Files
+The [verification](verification) projects compile the exact source files as separate Application, Infrastructure, and API assemblies. They do not replace your application's project files. Run:
 
-| File | Purpose |
-| --- | --- |
-| `Templates/Feedback.html` | Email markup and placeholders |
-| `Models/FeedbackSubmission.cs` | Feedback type, fields, and attachment bytes |
-| `Services/FeedbackEmailOptions.cs` | App.config / Web.config settings |
-| `Services/FeedbackTemplateRenderer.cs` | Encoded HTML and plain-text rendering |
-| `Services/FeedbackMessageFactory.cs` | MIME message, embedded logo, attachments, validation |
-| `Services/FeedbackEmailService.cs` | Asynchronous TLS SMTP sending with cancellation |
-| `Program.cs` | Preview mode and a sample send |
-| `App.config` | Configuration template with example addresses |
-| `Preview/feedback-preview.html` | Ready-to-open sample layout |
+```powershell
+dotnet run --project verification/SmokeTests/FeedbackEmail.SmokeTests.csproj --configuration Release
+```
 
-## Delivery and verification
+Checks cover DI/configuration startup, the embedded template after publish, separate users' rendered messages, HTML escaping, attachment content, cancellation, and rejection of invalid feedback/unsafe SMTP configuration. The smoke tests do not open an SMTP connection. GitHub Actions runs the checks on Windows and Linux and also builds the retained .NET Framework example on Windows.
 
-SMTP success means the server accepted the message; it does not guarantee inbox placement. Exceptions propagate to your caller. Log an internal submission ID and the error type without logging credentials or the full feedback body. The service does not automatically retry an ambiguous send, which could deliver duplicate notifications. For background sending in a web application, use your existing durable job/outbox mechanism rather than an unawaited `Task.Run`.
+These checks verify this component; your complete company application and SMTP server still need an integration test using their real configuration.
 
-Source/configuration and the static HTML preview were checked during preparation. A .NET compiler and .NET Framework runtime were not available in the creation environment. The repository's `.NET Framework build` workflow builds the project on Windows and runs preview generation on every push and pull request. Check the Actions tab for the result of the current commit. No SMTP credentials are needed for these checks, and the workflow does not send email. Check a test message in your actual email clients before integrating; rendering varies across clients.
+## Documentation
 
-## Reference documentation
-
-- [MailKit 4.17.0 and supported target frameworks](https://www.nuget.org/packages/MailKit/4.17.0)
-- [MailKit SMTP connection options](https://mimekit.net/docs/html/M_MailKit_Net_Smtp_SmtpClient_ConnectAsync_2.htm)
-- [MimeKit BodyBuilder: HTML, plain text, embedded images, and attachments](https://mimekit.net/docs/html/T_MimeKit_BodyBuilder.htm)
-- [MailKit OAuth2 authentication](https://mimekit.net/docs/html/T_MailKit_Security_SaslMechanismOAuth2.htm)
-- [Microsoft notes on System.Net.Mail.SmtpClient for new development](https://learn.microsoft.com/en-us/dotnet/api/system.net.mail.smtpclient?view=netframework-4.8.1)
+- [ASP.NET Core options and DI](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/options)
+- [Development secret storage](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets)
+- [MailKit SMTP and TLS](https://mimekit.net/docs/html/M_MailKit_Net_Smtp_SmtpClient_ConnectAsync_2.htm)
