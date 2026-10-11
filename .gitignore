@@ -1,0 +1,18 @@
+# Visual Studio and build output
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Local secrets and generated mail messages
+.env
+.env.*
+*.local.config
+*.eml
+
+# OS metadata
+.DS_Store
+Thumbs.db
