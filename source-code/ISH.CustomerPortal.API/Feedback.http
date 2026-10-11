@@ -1,0 +1,32 @@
+@host = http://localhost:5080
+@apiKey = local-development-key-change-me
+
+### Health check
+GET {{host}}/health
+
+### Dynamic feedback. In Development, creates data/mail/*.eml.
+POST {{host}}/api/feedback
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "type": "ReportABug",
+  "comments": "The dashboard does not refresh after saving.\nPlease investigate.",
+  "submittedBy": "vamsi@example.com",
+  "hardwareId": "DEVICE-001",
+  "attachments": [
+    { "fileName": "details.txt", "content": "SGVsbG8gZnJvbSBmZWVkYmFjayE=" }
+  ]
+}
+
+### Preview only. No message is sent or saved.
+POST {{host}}/api/feedback/preview
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "type": "GeneralFeedback",
+  "comments": "The new dashboard is easy to use.",
+  "submittedBy": "another-user@example.com",
+  "hardwareId": "DEVICE-002"
+}

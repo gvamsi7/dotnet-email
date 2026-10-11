@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>$(FeedbackTargetFramework)</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../ISH.CustomerPortal.Application/ISH.CustomerPortal.Application.csproj" />
+    <PackageReference Include="MailKit" Version="4.17.0" />
+    <EmbeddedResource Include="Email/Templates/Feedback.html">
+      <LogicalName>ISH.CustomerPortal.Infrastructure.Email.Templates.Feedback.html</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+</Project>

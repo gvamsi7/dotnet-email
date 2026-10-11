@@ -19,7 +19,10 @@ namespace ISH.CustomerPortal.Infrastructure.Email
                 .Bind(configuration.GetSection(FeedbackEmailOptions.SectionName))
                 .ValidateOnStart();
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<FeedbackEmailOptions>, FeedbackEmailOptionsValidator>());
-            services.TryAddTransient<IFeedbackEmailService, SmtpFeedbackEmailService>();
+            services.TryAddTransient<IFeedbackEmailService>(provider =>
+                provider.GetRequiredService<IOptionsMonitor<FeedbackEmailOptions>>().CurrentValue.DeliveryMode == FeedbackDeliveryMode.Pickup
+                    ? (IFeedbackEmailService)ActivatorUtilities.CreateInstance<PickupFeedbackEmailService>(provider)
+                    : ActivatorUtilities.CreateInstance<SmtpFeedbackEmailService>(provider));
             return services;
         }
     }

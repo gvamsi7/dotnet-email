@@ -1,164 +1,205 @@
-# ISH feedback email integration
+# C# feedback SMTP API — .NET 10 / 11
 
-Email-only integration for the project layout shown in the screenshot:
-`ISH.CustomerPortal.API`, `ISH.CustomerPortal.Application`, and `ISH.CustomerPortal.Infrastructure`.
+A runnable ASP.NET Core API that creates the feedback email shown in the reference image. Each request supplies its own feedback type, comments, user email, hardware ID, and optional screenshots/files. The message contains a green Schneider Electric / Industrial Services Hub banner, submission details, footer, and both HTML and plain-text versions.
 
-The screenshot shows an ASP.NET Core Web SDK project with `appsettings.json`, `Program.cs`, and `DependencyInjection.cs`. Use the **source-code** files below for that application. The earlier .NET Framework 4.8 console example is retained in [examples/legacy-net48](examples/legacy-net48).
+The default target is **.NET 10**. .NET 11 can be selected with a build property; it is a release candidate as of 11 October 2026. These are modern .NET versions, distinct from classic **.NET Framework 4.8/4.8.1**. The earlier .NET Framework 4.8 example remains in [examples/legacy-net48](examples/legacy-net48).
 
-This repository is an integration component, not a copy of your company application. It adds no database, authentication scheme, feedback endpoint, or replacement application startup. Your existing handler supplies each user's feedback and calls the email service.
+## Run locally
 
-## Where each file belongs
+Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), then run these commands from the repository root:
 
-Paths below are relative to your existing `source-code` folder.
-
-| Existing project / location | Add or merge |
-| --- | --- |
-| `ISH.CustomerPortal.Application/Feedback` | `IFeedbackEmailService.cs` and `FeedbackSubmission.cs`: the interface, feedback data, and attachment bytes |
-| `ISH.CustomerPortal.Infrastructure/Email` | SMTP implementation, options, validation, renderer, message factory, token-provider interface, and DI extension |
-| `ISH.CustomerPortal.Infrastructure/Email/Templates` | `Feedback.html`: the email layout |
-| `ISH.CustomerPortal.API` | `FeedbackEmailRegistration.cs`: a small registration extension |
-| `ISH.CustomerPortal.API/appsettings.json` | Merge the `FeedbackEmail` section from the [configuration example](integration/appsettings.feedback-email.example.json) |
-| `ISH.CustomerPortal.API/Program.cs` or its existing `DependencyInjection.cs` | Call `AddCustomerPortalFeedbackEmail(...)` once |
-| Your existing feedback handler/controller | Inject `IFeedbackEmailService` and call `SendAsync` with real submission data |
-
-`Domain`, persistence/SQL Server, authentication, WebSocket, EmptyOffer, and `ISH.Shared.Service` do not need changes for email sending. The screenshot also contains `ISH.CustomerPortal.Infrastructure.EcoS.Notification`; its existing implementation was not provided. The new SMTP implementation lives in the general Infrastructure project. If your team already routes all mail through EcoS.Notification, adapt that existing sender behind `IFeedbackEmailService` instead of registering two senders.
-
-## Integrate into your existing solution
-
-### 1. Copy the new files
-
-Merge this repository's [source-code](source-code) folder into your existing `source-code`. It contains only the new email files; it has no replacement `.csproj`, `Program.cs`, `DependencyInjection.cs`, or `appsettings.json`.
-
-The screenshot does not reveal `<TargetFramework>`. **Keep the target framework in your real projects.** The reference checks in this repo target .NET 8 to validate the files independently; they are not a requirement to retarget your application. If your projects target an older runtime or `netstandard`, align the Microsoft.Extensions references with that runtime before integrating.
-
-### 2. Update project references and embed the template
-
-Merge the entries in [Infrastructure.csproj.additions.xml](integration/Infrastructure.csproj.additions.xml) into `ISH.CustomerPortal.Infrastructure.csproj`. They add:
-
-- A reference to `ISH.CustomerPortal.Application`, if missing.
-- MailKit 4.17.0 in **Infrastructure only**.
-- `Microsoft.AspNetCore.App` as a framework reference for the ASP.NET Core configuration, DI, options, and logging APIs. Add only if missing. This form is for an Infrastructure project targeting modern .NET; if it targets `netstandard`, use the compatible Microsoft.Extensions packages already used by your solution instead.
-- An explicit embedded resource for the HTML:
-
-```xml
-<EmbeddedResource Include="Email\Templates\Feedback.html">
-  <LogicalName>ISH.CustomerPortal.Infrastructure.Email.Templates.Feedback.html</LogicalName>
-</EmbeddedResource>
+```sh
+dotnet restore DotnetEmail.sln
+dotnet run --project source-code/ISH.CustomerPortal.API/ISH.CustomerPortal.API.csproj
 ```
 
-With central package management, add the MailKit version to `Directory.Packages.props` and omit `Version` on the `PackageReference`.
+Open **http://localhost:5080/swagger**. Click **Authorize**, enter `local-development-key-change-me`, and try `POST /api/feedback`. You can also use [Feedback.http](source-code/ISH.CustomerPortal.API/Feedback.http) in Visual Studio or a REST client.
 
-Ensure the API references Application and Infrastructure; [API.csproj.additions.xml](integration/API.csproj.additions.xml) shows those entries. Add only references that are missing.
+The default launch profile selects Development and **Pickup mode**. It saves complete `.eml` messages under `source-code/ISH.CustomerPortal.API/data/mail` without requiring an SMTP account. Open an `.eml` in an email application to inspect the HTML and attachments. A `savedLocally` response confirms the local file was created; it does not send mail. This directory is ignored by Git and is not served by the API. Delete test messages when finished.
 
-The renderer reads the template from **its own Infrastructure assembly**. The API's `EnableDefaultContentItems=false` setting shown in the screenshot does not affect this embedded resource. There is no dependency on `wwwroot`, the process working directory, or a copied HTML file beside the application.
+In Visual Studio, open `DotnetEmail.sln` and set `ISH.CustomerPortal.API` as the startup project. Use a Visual Studio version that supports your installed SDK. If you use VS Code, open the repository and run the same command in its terminal. Running `dotnet run` at the repository root without `--project` will not select the API automatically.
 
-### 3. Configure SMTP in the API project
+For HTTPS development:
 
-Merge [appsettings.feedback-email.example.json](integration/appsettings.feedback-email.example.json) into the existing API `appsettings.json`. Replace the example SMTP host, username, sender, and support mailbox. Preserve all your application's other settings. `Host` is deliberately validated at startup so an unconfigured email feature fails with a clear message.
-
-Put credentials in your existing secret provider or server environment:
-
-| Environment variable | Configuration key |
-| --- | --- |
-| `FeedbackEmail__Password` | `FeedbackEmail:Password` |
-| `FeedbackEmail__AccessToken` | `FeedbackEmail:AccessToken` |
-
-These are ASP.NET Core configuration keys. The legacy example's `FEEDBACK_SMTP_PASSWORD` variable and `App.config` loader are not used by this version. Your existing normal ASP.NET Core configuration pipeline loads environment variables; if your app uses a custom pipeline, ensure that provider is included.
-
-For local development, use the API project's existing User Secrets setup or initialize it with `dotnet user-secrets init --project source-code/ISH.CustomerPortal.API`. Set `FeedbackEmail:Password` in that store. Do not commit passwords or tokens to JSON.
-
-`Security` accepts `StartTls` (commonly port 587) or `SslOnConnect` (commonly 465). Authentication accepts `Password`, `OAuth2`, or `None` for an administrator-approved TLS relay. Use the mode your provider supports. The sender must be permitted for the SMTP account.
-
-For OAuth2, implement and register `IFeedbackSmtpTokenProvider` using your existing identity service to acquire a valid SMTP-scoped access token for each send. `AccessToken` from configuration is also supported for short-lived tests. App registration, consent, permissions, and refresh are provider-specific and are not included.
-
-### 4. Register the service once
-
-In the **existing** API `Program.cs`, after the application's normal configuration setup and before `builder.Build()`:
-
-```csharp
-using ISH.CustomerPortal.API;
-
-builder.Services.AddCustomerPortalFeedbackEmail(builder.Configuration);
+```sh
+dotnet dev-certs https --trust
+dotnet run --project source-code/ISH.CustomerPortal.API/ISH.CustomerPortal.API.csproj --launch-profile https
 ```
 
-Or put this inside your **existing** `DependencyInjection.cs` registration method:
+Then use https://localhost:7080/swagger.
 
-```csharp
-services.AddCustomerPortalFeedbackEmail(configuration);
-```
+## API endpoints
 
-Use one location. Keep your existing authentication, middleware, controllers, service registrations, and application startup.
+All feedback endpoints require the `X-API-Key` header. Health is public; Swagger is available only in Development.
 
-### 5. Call from your existing feedback handler
+| Method | Endpoint | Input / result |
+| --- | --- | --- |
+| POST | `/api/feedback` | JSON feedback; optional base64 attachments; sends or saves a message |
+| POST | `/api/feedback/upload` | Multipart form fields and actual uploaded files |
+| POST | `/api/feedback/preview` | JSON feedback; returns HTML without sending or saving |
+| GET | `/health` | Process health; does not test SMTP availability |
+| GET | `/swagger` | Interactive API documentation in Development |
 
-Inject the Application interface through your existing constructor:
+Example JSON:
 
-```csharp
-using ISH.CustomerPortal.Application.Feedback;
-
-private readonly IFeedbackEmailService _feedbackEmail;
-
-// Add this parameter and assignment to your existing constructor:
-// IFeedbackEmailService feedbackEmail
-// _feedbackEmail = feedbackEmail;
-```
-
-After your existing validation (and feedback save, if you already store it), await:
-
-```csharp
-var submission = new FeedbackSubmission
+```json
 {
-    Type = model.IsBug ? FeedbackType.ReportABug : FeedbackType.GeneralFeedback,
-    Comments = model.Comments,
-    SubmittedBy = currentUser.Email,
-    SubmittedAt = DateTimeOffset.UtcNow,
-    HardwareId = model.HardwareId
-};
-
-string messageId = await _feedbackEmail.SendAsync(submission, cancellationToken);
+  "type": "ReportABug",
+  "comments": "The dashboard does not refresh after saving.\nPlease investigate.",
+  "submittedBy": "vamsi@example.com",
+  "hardwareId": "DEVICE-001",
+  "attachments": [
+    {
+      "fileName": "details.txt",
+      "content": "SGVsbG8gZnJvbSBmZWVkYmFjayE="
+    }
+  ]
+}
 ```
 
-`model`, `currentUser`, and `cancellationToken` above refer to your existing request model, trusted authenticated-user context, and handler/request cancellation token. Map their names to your application. Use the verified user's email from your server-side identity service; do not treat an arbitrary form field as verified identity.
+`type` accepts `ReportABug` or `GeneralFeedback`. `hardwareId` and `attachments` are optional. Submission time is generated by the server and shown in the configured time zone, defaulting to Asia/Kolkata. Numeric JSON enum values are rejected.
 
-The configured application SMTP account sends each notification to the configured support mailbox. The body identifies the individual user in `Submitted By`. Each call creates a separate message and SMTP client, and shared feedback data is not stored in the sender.
+Example curl request (Bash; use `curl.exe` in PowerShell or paste the JSON into Swagger):
 
-Add screenshots from your existing validated upload flow before sending:
+```sh
+curl http://localhost:5080/api/feedback \
+  -H 'X-API-Key: local-development-key-change-me' \
+  -H 'Content-Type: application/json' \
+  --data '{"type":"GeneralFeedback","comments":"The new dashboard is easy to use.","submittedBy":"vamsi@example.com","hardwareId":"DEVICE-001"}'
+```
 
-```csharp
-submission.Attachments.Add(new FeedbackAttachment
+Upload a screenshot:
+
+```sh
+curl http://localhost:5080/api/feedback/upload \
+  -H 'X-API-Key: local-development-key-change-me' \
+  -F 'type=ReportABug' \
+  -F 'comments=Please check the attached screenshot.' \
+  -F 'submittedBy=vamsi@example.com' \
+  -F 'hardwareId=DEVICE-001' \
+  -F 'attachments=@Screenshot1.png'
+```
+
+Repeat the `attachments` field for multiple files. The form does not need a manually supplied Content-Type boundary.
+
+Success response:
+
+```json
 {
-    FileName = "Screenshot1.png",
-    Content = validatedScreenshotBytes
-});
+  "messageId": "generated-message-id@example.com",
+  "status": "savedLocally",
+  "submittedAt": "2026-10-11T11:30:00+00:00"
+}
 ```
 
-`validatedScreenshotBytes` must come from your upload validation/storage pipeline, not an arbitrary server file path supplied by a caller. Up to 5 files and 10 MiB of combined raw attachment data are allowed. The mail contains actual MIME attachments. An optional `DownloadUrl` can reference an existing HTTPS route managed by your application; without a URL the body shows the filename with `(attached)`.
+SMTP mode returns `smtpAccepted` after the server acknowledges the message. SMTP acceptance does not guarantee delivery into the recipient's inbox. Each submission produces a separate message with separate attachment content. This API does not create a feedback database or a feedback-history screen.
 
-If feedback is already persisted and SMTP fails, handle notification status separately so users are not told that the stored feedback was lost. Use your existing durable job/outbox system if mail must be delivered in the background. Do not use an unawaited `Task.Run` inside an HTTP request. The component propagates exceptions and does not automatically retry a send with an uncertain outcome.
+## Send through your SMTP server
 
-## Customization
+Use User Secrets for local development. Run each command from the repository root and replace the example settings with the values supplied by your SMTP administrator:
 
-- Edit `Infrastructure/Email/Templates/Feedback.html` for the layout.
-- The default green is `#3DCD58`; the brand defaults to a text fallback. Set `LogoFilePath` to a trusted absolute PNG/JPG path to embed your approved logo using CID.
-- Supply real HTTPS `TermsUrl` and `PrivacyUrl` values to turn the footer text into links.
-- `TimeZoneId` defaults to `Asia/Kolkata`; choose an ID available on your server.
-- User-entered text is HTML-encoded, newlines are preserved, and the MIME message includes a plain-text version.
-- SMTP credentials and the feedback body are not logged by the sender. Successful SMTP acceptance logs only the generated message ID.
-
-## Verify without sending email
-
-The [verification](verification) projects compile the exact source files as separate Application, Infrastructure, and API assemblies. They do not replace your application's project files. Run:
-
-```powershell
-dotnet run --project verification/SmokeTests/FeedbackEmail.SmokeTests.csproj --configuration Release
+```sh
+dotnet user-secrets set 'FeedbackEmail:DeliveryMode' 'Smtp' --project source-code/ISH.CustomerPortal.API
+dotnet user-secrets set 'FeedbackEmail:Host' 'smtp.your-company.com' --project source-code/ISH.CustomerPortal.API
+dotnet user-secrets set 'FeedbackEmail:Port' '587' --project source-code/ISH.CustomerPortal.API
+dotnet user-secrets set 'FeedbackEmail:Security' 'StartTls' --project source-code/ISH.CustomerPortal.API
+dotnet user-secrets set 'FeedbackEmail:Username' 'notifications@your-company.com' --project source-code/ISH.CustomerPortal.API
+dotnet user-secrets set 'FeedbackEmail:Password' 'YOUR-SMTP-SECRET' --project source-code/ISH.CustomerPortal.API
+dotnet user-secrets set 'FeedbackEmail:FromAddress' 'notifications@your-company.com' --project source-code/ISH.CustomerPortal.API
+dotnet user-secrets set 'FeedbackEmail:ToAddress' 'support@your-company.com' --project source-code/ISH.CustomerPortal.API
 ```
 
-Checks cover DI/configuration startup, the embedded template after publish, separate users' rendered messages, HTML escaping, attachment content, cancellation, and rejection of invalid feedback/unsafe SMTP configuration. The smoke tests do not open an SMTP connection. GitHub Actions runs the checks on Windows and Linux and also builds the retained .NET Framework example on Windows.
+Restart the API after changing delivery configuration. The sender address must be permitted by the SMTP account. For port 465, use `SslOnConnect`. Only mandatory STARTTLS or implicit TLS are accepted; there is no certificate-validation bypass or plaintext SMTP mode.
 
-These checks verify this component; your complete company application and SMTP server still need an integration test using their real configuration.
+The configured application account sends to the configured support mailbox. A caller cannot choose arbitrary recipients or change the envelope sender. The user's `submittedBy` appears in the message body, so different users' feedback remains distinct.
 
-## Documentation
+`Authentication` supports:
 
-- [ASP.NET Core options and DI](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/options)
-- [Development secret storage](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets)
-- [MailKit SMTP and TLS](https://mimekit.net/docs/html/M_MailKit_Net_Smtp_SmtpClient_ConnectAsync_2.htm)
+| Mode | Required configuration |
+| --- | --- |
+| `Password` | Username and provider-supported SMTP password/app password |
+| `OAuth2` | Username plus a SMTP-scoped token from `IFeedbackSmtpTokenProvider`, or a temporary `FeedbackEmail:AccessToken` |
+| `None` | An administrator-approved TLS SMTP relay |
+
+OAuth consent, token acquisition, and refresh depend on your identity provider. Implement the existing [IFeedbackSmtpTokenProvider](source-code/ISH.CustomerPortal.Infrastructure/Email/IFeedbackSmtpTokenProvider.cs) using your application's identity service for a long-running OAuth deployment. Password authentication must be enabled/supported by your provider; a normal account password may not work.
+
+For deployed environments use your host's secret provider or environment variables. The double underscore maps to a configuration section:
+
+| Environment variable | Purpose |
+| --- | --- |
+| `ApiSecurity__ApiKey` | API caller secret: 32–512 characters outside Development |
+| `FeedbackEmail__DeliveryMode` | `Smtp` |
+| `FeedbackEmail__Host` | SMTP hostname |
+| `FeedbackEmail__Port` | SMTP port, usually 587 or 465 |
+| `FeedbackEmail__Security` | `StartTls` or `SslOnConnect` |
+| `FeedbackEmail__Authentication` | `Password`, `OAuth2`, or `None` |
+| `FeedbackEmail__Username` | SMTP account |
+| `FeedbackEmail__Password` | SMTP secret for Password mode |
+| `FeedbackEmail__AccessToken` | Temporary token for OAuth2 tests |
+| `FeedbackEmail__FromAddress` | Approved sender mailbox |
+| `FeedbackEmail__ToAddress` | Support recipient mailbox |
+
+The base appsettings file defaults to SMTP with empty host/credentials. Outside Development the application refuses Pickup mode, a missing/short development API key, and incomplete SMTP configuration. User Secrets are loaded only in Development. Never commit credentials into appsettings or put the API key in a React bundle. Call this API from your backend; when integrating it into an authenticated company application, derive the user email from the verified server-side identity. The standalone API key authenticates the calling backend, and does not verify ownership of `submittedBy`.
+
+## Project structure and existing-project integration
+
+| Project / file | Responsibility |
+| --- | --- |
+| `DotnetEmail.sln` | Runnable solution |
+| `source-code/ISH.CustomerPortal.API` | Program, controllers, API key authentication, Swagger, request models, appsettings |
+| `source-code/ISH.CustomerPortal.Application/Feedback` | Feedback data and `IFeedbackEmailService` |
+| `source-code/ISH.CustomerPortal.Infrastructure/Email` | MailKit SMTP sender, local pickup sender, options, MIME factory, renderer |
+| `source-code/ISH.CustomerPortal.Infrastructure/Email/Templates/Feedback.html` | Embedded HTML layout |
+| `integration/EXISTING-PROJECT.md` | Instructions for adding only the email component to your existing project |
+| `verification` | Component checks and HTTP/TLS SMTP integration checks |
+| `examples/legacy-net48` | Retained classic .NET Framework console example |
+
+If you already have a company API, follow [the integration guide](integration/EXISTING-PROJECT.md). Copy the feedback/email folders and registration extension into the corresponding projects, then merge configuration and references. Preserve your existing project files, authentication, database, `Program.cs`, and `DependencyInjection.cs`. The new runnable API is a standalone reference host.
+
+Edit the HTML template to change the design. The template is embedded in the Infrastructure assembly and works after publishing. The brand uses a text fallback by default. Set `LogoFilePath` to a trusted server PNG/JPG path to embed your approved logo; for a browser preview the CID logo is visible in a mail client. `TermsUrl` and `PrivacyUrl` can provide real HTTPS footer links.
+
+## .NET 11 option
+
+Install the [.NET 11 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/11.0), then select its target for all three projects:
+
+```sh
+dotnet run --project source-code/ISH.CustomerPortal.API/ISH.CustomerPortal.API.csproj -p:FeedbackTargetFramework=net11.0
+```
+
+No source changes are required. To use it as the permanent default, change `FeedbackTargetFramework` in `source-code/Directory.Build.props`. .NET 10 remains the default stable target. For a classic .NET Framework application, use the retained 4.8 example rather than selecting `net10.0`/`net11.0` in its existing project.
+
+## Validation and delivery behavior
+
+- Comments require 1–10,000 characters. User text is HTML-encoded and template tokens inside comments stay literal.
+- At most five PNG/JPG/JPEG/PDF/TXT attachments are accepted, with a combined raw size of 10 MiB. Names must be simple filenames. Extension restrictions are not a malware/content-scanning service; use your existing upload scanning pipeline when needed.
+- Request bodies are limited to 16 MiB. The API permits ten feedback requests per client IP per minute and four concurrent requests per instance. A proxy's address counts unless trusted forwarded-header handling is configured by your hosting setup.
+- Invalid requests return 400, missing/invalid API keys 401, oversized bodies 413, and rate limits 429. Provider failures return 502, incomplete runtime mail configuration 503, and a send timeout 504.
+- Error responses do not expose SMTP credentials or raw provider diagnostics. The sender logs message IDs; provider-failure logs include the error type and trace ID.
+- Sending is awaited. There is no automatic retry: a lost SMTP acknowledgement can leave an uncertain outcome, so retries can duplicate mail. If you need durable background delivery, connect the service to your existing queue/outbox and track delivery separately from saved feedback.
+
+For deployment, publish the API and configure your IIS/Linux/container host with the required runtime and secrets:
+
+```sh
+dotnet publish source-code/ISH.CustomerPortal.API/ISH.CustomerPortal.API.csproj -c Release -o artifacts/api
+```
+
+Use HTTPS in deployed environments. IIS requires the matching ASP.NET Core Hosting Bundle. If you run the published DLL directly, set its working directory to `artifacts/api` so appsettings files load.
+
+## Verification
+
+Publish and run the API checks (Python 3 required):
+
+```sh
+dotnet publish source-code/ISH.CustomerPortal.API/ISH.CustomerPortal.API.csproj -c Release -o artifacts/api
+python3 verification/api_smoke_test.py --app artifacts/api/ISH.CustomerPortal.API.dll
+```
+
+On Linux with OpenSSL installed, add `--smtp` to exercise actual local STARTTLS and implicit TLS connections, password authentication, MIME delivery, and safe authentication-failure responses. The script generates an ephemeral test CA and provides it only to child test processes; application certificate validation stays enabled. It sends only to a local SMTP fixture and does not contact a real mail provider.
+
+The original reusable-component checks still run with the .NET 8 SDK/runtime:
+
+```sh
+dotnet run --project verification/SmokeTests/FeedbackEmail.SmokeTests.csproj -c Release
+```
+
+GitHub Actions builds the runnable .NET 10 API on Windows and Linux, tests the .NET 11 target on Linux, runs the reusable-component checks, and retains the .NET Framework 4.8 example build. SMTP tests cover local delivery; validate your provider configuration separately before using it for real feedback.

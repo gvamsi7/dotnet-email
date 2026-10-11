@@ -5,6 +5,6 @@
     <AssemblyName>ISH.CustomerPortal.Application</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../source-code/ISH.CustomerPortal.Application/**/*.cs" />
+    <Compile Include="../../source-code/ISH.CustomerPortal.Application/Feedback/**/*.cs" />
   </ItemGroup>
 </Project>

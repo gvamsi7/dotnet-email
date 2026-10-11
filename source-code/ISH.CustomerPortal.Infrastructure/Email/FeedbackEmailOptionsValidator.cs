@@ -13,7 +13,12 @@ namespace ISH.CustomerPortal.Infrastructure.Email
         {
             if (options == null) return ValidateOptionsResult.Fail("FeedbackEmail settings are missing.");
             var errors = new List<string>();
-            if (string.IsNullOrWhiteSpace(options.Host) || options.Host == "smtp.example.com")
+            if (!Enum.IsDefined(typeof(FeedbackDeliveryMode), options.DeliveryMode))
+                errors.Add("FeedbackEmail:DeliveryMode must be Smtp or Pickup.");
+            if (options.DeliveryMode == FeedbackDeliveryMode.Pickup && string.IsNullOrWhiteSpace(options.PickupDirectory))
+                errors.Add("FeedbackEmail:PickupDirectory is required for Pickup mode.");
+            if (options.DeliveryMode == FeedbackDeliveryMode.Smtp &&
+                (string.IsNullOrWhiteSpace(options.Host) || options.Host == "smtp.example.com"))
                 errors.Add("FeedbackEmail:Host must be your SMTP server hostname.");
             if (options.Port < 1 || options.Port > 65535)
                 errors.Add("FeedbackEmail:Port must be between 1 and 65535.");
@@ -21,7 +26,8 @@ namespace ISH.CustomerPortal.Infrastructure.Email
                 errors.Add("FeedbackEmail:Security must be StartTls or SslOnConnect.");
             if (!Enum.IsDefined(typeof(SmtpAuthentication), options.Authentication))
                 errors.Add("FeedbackEmail:Authentication must be Password, OAuth2, or None.");
-            if (options.Authentication != SmtpAuthentication.None && string.IsNullOrWhiteSpace(options.Username))
+            if (options.DeliveryMode == FeedbackDeliveryMode.Smtp &&
+                options.Authentication != SmtpAuthentication.None && string.IsNullOrWhiteSpace(options.Username))
                 errors.Add("FeedbackEmail:Username is required for authentication.");
             if (options.TimeoutSeconds < 1 || options.TimeoutSeconds > 300)
                 errors.Add("FeedbackEmail:TimeoutSeconds must be between 1 and 300.");

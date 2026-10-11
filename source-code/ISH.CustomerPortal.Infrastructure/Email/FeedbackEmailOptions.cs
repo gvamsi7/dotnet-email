@@ -2,6 +2,12 @@ using MailKit.Security;
 
 namespace ISH.CustomerPortal.Infrastructure.Email
 {
+    public enum FeedbackDeliveryMode
+    {
+        Smtp,
+        Pickup
+    }
+
     public enum SmtpAuthentication
     {
         Password,
@@ -14,6 +20,8 @@ namespace ISH.CustomerPortal.Infrastructure.Email
     public sealed class FeedbackEmailOptions
     {
         public const string SectionName = "FeedbackEmail";
+        public FeedbackDeliveryMode DeliveryMode { get; set; } = FeedbackDeliveryMode.Smtp;
+        public string PickupDirectory { get; set; } = "data/mail";
         public string Host { get; set; }
         public int Port { get; set; } = 587;
         public SecureSocketOptions Security { get; set; } = SecureSocketOptions.StartTls;

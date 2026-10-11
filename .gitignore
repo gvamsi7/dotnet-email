@@ -19,3 +19,5 @@ Thumbs.db
 
 # Verification publish output
 artifacts/
+**/data/mail/
+__pycache__/

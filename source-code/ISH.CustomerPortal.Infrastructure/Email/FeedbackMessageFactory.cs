@@ -22,7 +22,7 @@ namespace ISH.CustomerPortal.Infrastructure.Email
         // Caller owns and disposes the returned message.
         public MimeMessage Create(FeedbackSubmission feedback)
         {
-            Validate(feedback);
+            ValidateSubmission(feedback);
             var from = ParseEmail(options.FromAddress, "FromAddress");
             var to = ParseEmail(options.ToAddress, "ToAddress");
             var body = new BodyBuilder();
@@ -61,7 +61,7 @@ namespace ISH.CustomerPortal.Infrastructure.Email
             return message;
         }
 
-        private static void Validate(FeedbackSubmission feedback)
+        public static void ValidateSubmission(FeedbackSubmission feedback)
         {
             if (feedback == null) throw new ArgumentNullException(nameof(feedback));
             if (!Enum.IsDefined(typeof(FeedbackType), feedback.Type))

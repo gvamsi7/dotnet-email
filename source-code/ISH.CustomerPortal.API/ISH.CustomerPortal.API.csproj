@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>$(FeedbackTargetFramework)</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-email-feedback-api</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ISH.CustomerPortal.Application/ISH.CustomerPortal.Application.csproj" />
+    <ProjectReference Include="../ISH.CustomerPortal.Infrastructure/ISH.CustomerPortal.Infrastructure.csproj" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.0" />
+  </ItemGroup>
+</Project>

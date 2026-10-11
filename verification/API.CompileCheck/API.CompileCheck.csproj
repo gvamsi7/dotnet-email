@@ -9,6 +9,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Application.CompileCheck/Application.CompileCheck.csproj" />
     <ProjectReference Include="../Infrastructure.CompileCheck/Infrastructure.CompileCheck.csproj" />
-    <Compile Include="../../source-code/ISH.CustomerPortal.API/**/*.cs" />
+    <!-- This check is for the drop-in registration only; the actual API is built separately. -->
+    <Compile Include="../../source-code/ISH.CustomerPortal.API/FeedbackEmailRegistration.cs" />
   </ItemGroup>
 </Project>

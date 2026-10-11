@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <FeedbackTargetFramework Condition="'$(FeedbackTargetFramework)' == ''">net10.0</FeedbackTargetFramework>
+  </PropertyGroup>
+</Project>

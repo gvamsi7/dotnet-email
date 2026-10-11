@@ -10,7 +10,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../Application.CompileCheck/Application.CompileCheck.csproj" />
     <PackageReference Include="MailKit" Version="4.17.0" />
-    <Compile Include="../../source-code/ISH.CustomerPortal.Infrastructure/**/*.cs" />
+    <Compile Include="../../source-code/ISH.CustomerPortal.Infrastructure/Email/**/*.cs" />
     <EmbeddedResource Include="../../source-code/ISH.CustomerPortal.Infrastructure/Email/Templates/Feedback.html">
       <LogicalName>ISH.CustomerPortal.Infrastructure.Email.Templates.Feedback.html</LogicalName>
     </EmbeddedResource>
