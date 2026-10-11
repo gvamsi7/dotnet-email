@@ -1,0 +1,36 @@
+name: .NET Framework build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Build .NET Framework 4.8 project
+        run: dotnet build .\FeedbackEmail.csproj --configuration Release --nologo
+
+      - name: Generate HTML and EML previews without SMTP
+        shell: pwsh
+        run: |
+          & .\bin\Release\net48\FeedbackEmail.exe --preview
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          foreach ($file in @('feedback-preview.html', 'feedback-preview.eml')) {
+            $path = Join-Path '.\bin\Release\net48\Preview' $file
+            if (!(Test-Path $path) -or (Get-Item $path).Length -eq 0) {
+              throw "Expected a non-empty preview file: $path"
+            }
+          }
