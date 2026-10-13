@@ -52,7 +52,7 @@ export default function FeedbackDialog({ feedbackOpen, setFeedbackOpen, userEmai
       if (toolbarRef.current) toolbarRef.current.style.visibility = "hidden";
       await nextPaint();
       // Capture only the visible page region, preserving its current scroll position.
-      const canvas = await html2canvas(document.documentElement, {
+      const canvas = await html2canvas(document.body, {
         backgroundColor: "#ffffff",
         useCORS: true,
         allowTaint: false,
@@ -62,11 +62,33 @@ export default function FeedbackDialog({ feedbackOpen, setFeedbackOpen, userEmai
         y: window.scrollY,
         width: window.innerWidth,
         height: window.innerHeight,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
         ignoreElements: (element) => element.hasAttribute("data-screenshot-ignore"),
       });
-      const blob = await new Promise<Blob>((resolve, reject) =>
-        canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Unable to encode PNG")), "image/png")
-      );
+
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error("Screenshot canvas is empty.");
+      }
+
+      // Export with the explicit image/png MIME type. This avoids interpreting
+      // the HTML/SVG data URLs sometimes returned by DOM screenshot libraries
+      // as PNGs. Check the actual browser-produced bytes, not a guessed URL.
+      const pngDataUrl = canvas.toDataURL("image/png");
+      if (!pngDataUrl.startsWith("data:image/png;base64,")) {
+        throw new Error("Browser did not return a PNG screenshot.");
+      }
+
+      const binary = atob(pngDataUrl.slice("data:image/png;base64,".length));
+      const pngBytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+      if (!signature.every((byte, index) => pngBytes[index] === byte)) {
+        throw new Error("Captured screenshot is not a valid PNG.");
+      }
+
+      const blob = new Blob([pngBytes], { type: "image/png" });
       if (blob.size > MAX_BYTES) throw new Error("Screenshot exceeds the 5 MiB attachment limit.");
       setScreenshot(new File([blob], `Feedback-${Date.now()}.png`, { type: "image/png" }));
       setScreenshotMode(false);
