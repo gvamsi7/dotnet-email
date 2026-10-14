@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import html2canvas from "html2canvas-pro";
+import type { FormEvent } from "react";
+import html2canvas from "html2canvas";
 import { Camera, Download, Eye, Send, Trash2, X } from "lucide-react";
 
 export interface FeedbackProps {
@@ -51,7 +52,8 @@ export default function FeedbackDialog({ feedbackOpen, setFeedbackOpen, userEmai
     try {
       if (toolbarRef.current) toolbarRef.current.style.visibility = "hidden";
       await nextPaint();
-      // Capture only the visible page region, preserving its current scroll position.
+      // html2canvas renders the current DOM into a real HTMLCanvasElement.
+      // This is a viewport capture, not a browser/desktop screen recording.
       const canvas = await html2canvas(document.body, {
         backgroundColor: "#ffffff",
         useCORS: true,
@@ -64,32 +66,35 @@ export default function FeedbackDialog({ feedbackOpen, setFeedbackOpen, userEmai
         height: window.innerHeight,
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
-        scrollX: -window.scrollX,
-        scrollY: -window.scrollY,
+        // The feedback popup is conditionally hidden in screenshot mode;
+        // these markers also exclude the temporary capture toolbar.
         ignoreElements: (element) => element.hasAttribute("data-screenshot-ignore"),
       });
 
-      if (canvas.width === 0 || canvas.height === 0) {
+      if (!canvas.width || !canvas.height) {
         throw new Error("Screenshot canvas is empty.");
       }
 
-      // Export with the explicit image/png MIME type. This avoids interpreting
-      // the HTML/SVG data URLs sometimes returned by DOM screenshot libraries
-      // as PNGs. Check the actual browser-produced bytes, not a guessed URL.
-      const pngDataUrl = canvas.toDataURL("image/png");
-      if (!pngDataUrl.startsWith("data:image/png;base64,")) {
-        throw new Error("Browser did not return a PNG screenshot.");
+      // Encode the canvas directly to a PNG Blob, without data URL parsing.
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((result) => {
+          if (result) resolve(result);
+          else reject(new Error("Browser could not generate a PNG image."));
+        }, "image/png");
+      });
+
+      const header = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+      const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+      if (
+        blob.type !== "image/png" ||
+        !pngSignature.every((byte, index) => header[index] === byte)
+      ) {
+        throw new Error("Screenshot did not return a valid PNG image.");
       }
 
-      const binary = atob(pngDataUrl.slice("data:image/png;base64,".length));
-      const pngBytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-      const signature = [137, 80, 78, 71, 13, 10, 26, 10];
-      if (!signature.every((byte, index) => pngBytes[index] === byte)) {
-        throw new Error("Captured screenshot is not a valid PNG.");
+      if (blob.size > MAX_BYTES) {
+        throw new Error("Screenshot exceeds the 5 MiB attachment limit.");
       }
-
-      const blob = new Blob([pngBytes], { type: "image/png" });
-      if (blob.size > MAX_BYTES) throw new Error("Screenshot exceeds the 5 MiB attachment limit.");
       setScreenshot(new File([blob], `Feedback-${Date.now()}.png`, { type: "image/png" }));
       setScreenshotMode(false);
     } catch (cause: unknown) {
@@ -102,7 +107,7 @@ export default function FeedbackDialog({ feedbackOpen, setFeedbackOpen, userEmai
     }
   };
 
-  const sendFeedback = async (event: React.FormEvent<HTMLFormElement>) => {
+  const sendFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!message.trim()) return;
     if (!onSubmit) { setError("Connect an onSubmit handler to your feedback API before sending."); return; }

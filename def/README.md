@@ -43,8 +43,9 @@ Change the endpoint and field names to match your backend. **The demo does not s
 
 ## Notes
 
-- Uses `html2canvas-pro` for a viewport screenshot, not browser screen capture; no screen-share permission prompt.
+- Uses `html2canvas` (1.4.x) for a viewport screenshot, not browser screen capture; no screen-share permission prompt.
 - Some cross-origin images, videos, iframes and complex CSS may not be faithfully rendered.
 - The feedback modal remains mounted as React component state; only its UI is conditionally hidden, keeping user-entered feedback intact.
-- PNG attachment limit: 5 MiB.
+- PNG attachment limit: 5 MiB. Captures are exported using `canvas.toBlob(…, "image/png")` and the PNG signature is checked before creating a `File`.
+- Standard html2canvas does not support every modern CSS color function (such as `oklch()`). If your app uses unsupported CSS, prefer compatible fallback colors for capture.
 - If integrating into an existing modal library, ensure its separately portaled backdrop is also hidden during screenshot mode.
